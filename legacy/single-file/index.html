@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>视频生成画布工作台</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#f8fafc;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55}
+header{padding:14px 20px;background:#fff;border-bottom:1px solid #e2e8f0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+header h1{font-size:19px;margin:0}
+header p{margin:0;color:#475569;font-size:13px}
+button{border:0;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;background:#ea580c;color:#fff;font-weight:700}
+button.secondary{background:#e2e8f0;color:#111827}
+button.ghost{background:#fff;border:1px solid #cbd5e1;color:#111827}
+button.small{padding:5px 9px;font-size:12px}
+button:disabled{opacity:.5;cursor:default}
+main{display:flex;min-height:calc(100vh - 62px)}
+#canvas{flex:1;padding:18px 20px;overflow:auto}
+#canvas h2{font-size:15px;margin:4px 0 10px}
+.hint{color:#475569;font-size:13px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:12px}
+.warn{background:#fff7ed;border:1px solid #fdba74;color:#7c2d12}
+.warn b{color:#9a3412}
+#board{display:flex;flex-direction:column;gap:12px}
+.card{background:#fff;border:2px solid #e2e8f0;border-radius:12px;padding:14px;cursor:pointer}
+.card.sel{border-color:#ea580c;box-shadow:0 0 0 3px #ffedd5}
+.card h3{margin:0 0 6px;font-size:15px}
+.card .meta{color:#475569;font-size:12px;margin-bottom:6px}
+.card .line{font-weight:700}
+.card .custom{font-size:13px;color:#334155;margin-top:6px}
+.card .link{font-size:13px;margin-top:4px;word-break:break-all}
+.card .actions{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+#panel{width:380px;flex:none;background:#fff;border-left:1px solid #e2e8f0;padding:16px;overflow:auto}
+#panel h2{font-size:16px;margin:0 0 4px}
+#panel h3{font-size:14px;margin:18px 0 6px;border-top:1px solid #e2e8f0;padding-top:14px}
+#panel h3:first-of-type{border-top:0;padding-top:0}
+label{font-weight:700;display:block;margin:9px 0 3px;font-size:13px}
+input,select,textarea{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;color:#111827;background:#fff;font-size:14px}
+textarea{min-height:64px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.note{font-size:12px;color:#475569}
+.fn{display:flex;gap:6px;align-items:center;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin:6px 0}
+.fn b{flex:1}
+.proj{display:flex;gap:6px;align-items:center;border:1px solid #e2e8f0;border-radius:8px;padding:8px;margin:6px 0;cursor:pointer}
+.proj.sel{border-color:#ea580c;background:#fff7ed}
+.proj b{flex:1}
+#out{white-space:pre-wrap;background:#f1f5f9;border-radius:8px;padding:10px;font-size:13px;max-height:220px;overflow:auto}
+#status{font-size:12px;color:#475569}
+@media(max-width:900px){main{flex-direction:column}#panel{width:100%;border-left:0;border-top:1px solid #e2e8f0}}
+</style>
+</head>
+<body>
+<header>
+<h1>视频生成画布工作台</h1>
+<p>GitHub Pages 免费版 · 不登录、不联网（除打开页面外）、不绑任何账号 · 数据存在本机浏览器</p>
+<span id="status">正在加载…</span>
+</header>
+<div style="padding:10px 20px 0">
+<div class="hint warn"><b>重要：视频原片不要上传到这个工作台。</b>本工作台不上传、不保存任何视频文件——大文件（尤其超过 1G 的原片）请放在云盘 / 对象存储里，只把链接填进卡片的“素材链接”字段。GitHub 单个文件限 100MB、仓库约 1GB，也放不下大视频。画布里只存分镜、台词、提示词和链接。</div>
+</div>
+<main>
+<section id="canvas">
+<h2>项目</h2>
+<div class="row">
+<select id="projectSelect" onchange="switchProject(this.value)"></select>
+<button class="secondary" onclick="createProject()">+ 新建项目</button>
+<button class="secondary" onclick="renameProject()">改名</button>
+<button class="secondary" onclick="duplicateProject()">复制项目</button>
+<button class="ghost" onclick="deleteProject()">删除项目</button>
+</div>
+<div id="projectList" style="margin-top:8px"></div>
+<h2 style="margin-top:16px">画布 — 点一张卡片，右边就能改它；拖卡片上下换顺序</h2>
+<div class="hint">已预装“面馆示例”6 条。改完自动保存在这台浏览器（IndexedDB，空间比 localStorage 大得多；不支持时自动用 localStorage）。换电脑 / 发给工作室同事时，用右边的“导出 / 导入 JSON”搬运项目。</div>
+<div id="board"></div>
+<div style="margin-top:12px"><button onclick="addClip()">+ 添加一张卡片</button> <button class="secondary" onclick="copyAllConverted()">复制全部转换提示词</button></div>
+<h2 style="margin-top:20px">转换结果预览</h2>
+<div id="out">点一张卡片上的功能按钮，或点“复制全部转换提示词”后这里会显示。</div>
+</section>
+<aside id="panel">
+<h2>右边 · 可视化编辑</h2>
+<p class="note">不用写代码，点左边卡片，右边直接改；想加功能，在下面“添加功能”里填个名字和模板就行。</p>
+
+<h3>1. 选中卡片</h3>
+<div id="editor"><p class="note">先点左边任意一张卡片。</p></div>
+
+<h3>2. 添加自定义字段</h3>
+<p class="note">比如给选中的卡片加“参考图：图1”“配音：儿童男声”等，字段会显示在卡片上，也会进导出结果。</p>
+<div class="row"><input id="cfKey" placeholder="字段名，如 参考图"><input id="cfVal" placeholder="字段值，如 图1"></div>
+<button class="secondary" onclick="addCustomField()" style="margin-top:8px">加到选中卡片</button>
+
+<h3>3. 添加功能</h3>
+<p class="note">功能 = 一个可重复用的转换模板。占位符：{scene} 画面，{line} 台词，{who} 人物，{dur} 时长，{camera} 运镜，{sound} 音效，{time} 时间，{title} 标题。填好后它会出现在每张卡片上，点一下就按这个模板生成；“复制全部”用第一个功能模板。</p>
+<input id="fnName" placeholder="功能名，如 转 Seedance">
+<textarea id="fnTpl" placeholder="模板，如：人物绑定：@{who}参考图。画面：{scene}。台词：{line}。"></textarea>
+<button onclick="addFunction()">+ 添加这个功能</button>
+<div id="fnList"></div>
+
+<h3>4. 外观</h3>
+<label>选中卡片颜色</label>
+<input type="color" id="cardColor" value="#ffffff" onchange="setColor(this.value)">
+<p class="note">颜色只改选中卡片，方便在画布上区分 A / B / 动作镜头。</p>
+
+<h3>5. 数据与带走</h3>
+<p class="note">这个工作台可以整个带走：代码在 GitHub 仓库里，项目数据用下面导出成 JSON。账号、浏览器、电脑换了都没关系，重新打开页面再导入 JSON 就行。视频原片不在 JSON 里，只存链接，记得另外备份原片。</p>
+<div style="display:flex;gap:6px;flex-wrap:wrap">
+<button class="secondary" onclick="exportCurrent()">导出当前项目 JSON</button>
+<button class="secondary" onclick="exportAll()">导出全部项目 JSON</button>
+<button class="secondary" onclick="document.getElementById('importFile').click()">导入 JSON</button>
+<input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importJSON(event)">
+</div>
+<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+<button class="secondary" onclick="saveNow()">立即保存到本机</button>
+<button class="secondary" onclick="resetDemo()">恢复面馆示例</button>
+<button class="ghost" onclick="clearAll()">清空当前项目卡片</button>
+</div>
+<p class="note" id="storageNote">存储：检测中…</p>
+</aside>
+</main>
+<script>
+var projects=[], funcs=[], activeId=null, sel=null;
+var KEY='video-canvas-v2';
+var DB_NAME='video-canvas-db', db=null, useIDB=false;
+var DEMO_CLIPS=[
+{id:1,title:'第1条 · 倒持筷子挑面',time:'0:00–0:02',dur:'2.0秒',who:'A',scene:'特写A坐在木桌前，右手倒持筷子从印字大碗中挑起拌面',line:'',camera:'固定机位、特写',sound:'无',mediaLink:'',color:'#ffffff',custom:[]},
+{id:2,title:'第2条 · B 提醒',time:'0:02–0:03.6',dur:'1.6秒',who:'B',scene:'近景B正面看向镜头，微笑善意提醒',line:'帅哥，你筷子拿反了',camera:'固定机位、近景',sound:'无',mediaLink:'',color:'#ffffff',custom:[{k:'参考图',v:'图1（B）'}]},
+{id:3,title:'第3条 · 我是故意的',time:'0:03.6–0:04.6',dur:'1.0秒',who:'A',scene:'近景A嘟嘴直视镜头，双颊鼓起一脸不服',line:'我是故意的',camera:'固定机位、近景',sound:'无',mediaLink:'',color:'#ffffff',custom:[]},
+{id:4,title:'第4条 · 防人之心不可无',time:'0:04.6–0:06',dur:'1.4秒',who:'A',scene:'近景A表情转严肃，微微点头作老成状',line:'防人之心不可无',camera:'固定机位、近景',sound:'无',mediaLink:'',color:'#ffffff',custom:[]},
+{id:5,title:'第5条 · 筷头别人经常用',time:'0:06–0:07.8',dur:'1.8秒',who:'A',scene:'近景A皱眉龇牙解释，眼神带着嫌弃',line:'你看筷头别人经常用',camera:'固定机位、近景',sound:'无',mediaLink:'',color:'#ffffff',custom:[]},
+{id:6,title:'第6条 · 我怕有传染病',time:'0:07.8–0:09.8',dur:'2.0秒',who:'A',scene:'近景A恢复平静直视镜头，说完略显小得意',line:'我怕有传染病传染给我',camera:'固定机位、近景',sound:'无',mediaLink:'',color:'#ffffff',custom:[]}];
+var DEMO_FN=[
+{id:1,name:'转 Seedance',tpl:'人物绑定：@{who}参考图。画面：{scene}。台词（只能由{who}说）：“{line}”。运镜：{camera}。音效：{sound}。画面内不烧录字幕。画面中仅保留单个对应人物。'},
+{id:2,name:'转 Muse',tpl:'画面中只有{who}一个人。画面：{scene}。台词：“{line}”。运镜：{camera}。不要出现第二个人物正面，不烧录字幕。'}];
+function demoProject(){return {id:'demo-noodle',name:'面馆示例',updatedAt:new Date().toISOString(),clips:JSON.parse(JSON.stringify(DEMO_CLIPS))};}
+function uid(){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function activeProject(){return projects.find(function(p){return p.id===activeId;})||projects[0];}
+function clips(){var p=activeProject();return p?p.clips:[];}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function setStatus(t){var el=document.getElementById('status');if(el)el.textContent=t;}
+/* ---- IndexedDB, localStorage fallback ---- */
+function openDB(){return new Promise(function(resolve,reject){
+  if(!('indexedDB' in window)){reject(new Error('no indexedDB'));return;}
+  var req=indexedDB.open(DB_NAME,1);
+  req.onupgradeneeded=function(){var d=req.result;if(!d.objectStoreNames.contains('projects'))d.createObjectStore('projects',{keyPath:'id'});if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta',{keyPath:'key'});};
+  req.onsuccess=function(){resolve(req.result);};
+  req.onerror=function(){reject(req.error||new Error('indexedDB open failed'));};
+});}
+function idbGet(store,key){return new Promise(function(resolve,reject){var tx=db.transaction(store,'readonly');var r=tx.objectStore(store).get(key);r.onsuccess=function(){resolve(r.result);};r.onerror=function(){reject(r.error);};});}
+function idbGetAll(store){return new Promise(function(resolve,reject){var tx=db.transaction(store,'readonly');var r=tx.objectStore(store).getAll();r.onsuccess=function(){resolve(r.result||[]);};r.onerror=function(){reject(r.error);};});}
+function idbPut(store,val){return new Promise(function(resolve,reject){var tx=db.transaction(store,'readwrite');var r=tx.objectStore(store).put(val);r.onsuccess=function(){resolve();};r.onerror=function(){reject(r.error);};});}
+function idbDelete(store,key){return new Promise(function(resolve,reject){var tx=db.transaction(store,'readwrite');var r=tx.objectStore(store).delete(key);r.onsuccess=function(){resolve();};r.onerror=function(){reject(r.error);};});}
+function idbClear(store){return new Promise(function(resolve,reject){var tx=db.transaction(store,'readwrite');var r=tx.objectStore(store).clear();r.onsuccess=function(){resolve();};r.onerror=function(){reject(r.error);};});}
+async function load(){
+  try{
+    db=await openDB();useIDB=true;
+    var ps=await idbGetAll('projects');
+    var fnMeta=await idbGet('meta','functions');
+    var actMeta=await idbGet('meta','activeProjectId');
+    if(ps&&ps.length){projects=ps;funcs=(fnMeta&&fnMeta.value)||JSON.parse(JSON.stringify(DEMO_FN));activeId=(actMeta&&actMeta.value)||projects[0].id;}
+    else{projects=[demoProject()];funcs=JSON.parse(JSON.stringify(DEMO_FN));activeId=projects[0].id;await save();}
+    document.getElementById('storageNote').textContent='存储：IndexedDB（本机浏览器，容量远大于 localStorage）。视频原片不存这里，只存链接。';
+    setStatus('已加载 · IndexedDB');
+  }catch(e){
+    useIDB=false;
+    try{var d=JSON.parse(localStorage.getItem(KEY)||'null');
+      if(d&&d.projects&&d.projects.length){projects=d.projects;funcs=d.funcs||JSON.parse(JSON.stringify(DEMO_FN));activeId=d.activeId||projects[0].id;}
+      else if(d&&d.clips){projects=[{id:'demo-noodle',name:'面馆示例',updatedAt:new Date().toISOString(),clips:d.clips}];funcs=d.funcs||JSON.parse(JSON.stringify(DEMO_FN));activeId=projects[0].id;}
+      else{projects=[demoProject()];funcs=JSON.parse(JSON.stringify(DEMO_FN));activeId=projects[0].id;}
+    }catch(err){projects=[demoProject()];funcs=JSON.parse(JSON.stringify(DEMO_FN));activeId=projects[0].id;}
+    document.getElementById('storageNote').textContent='存储：localStorage 备用模式（浏览器不支持 IndexedDB）。容量较小，请勤导出 JSON 备份。视频原片不存这里，只存链接。';
+    setStatus('已加载 · localStorage 备用');
+  }
+  if(!activeProject())activeId=projects[0].id;
+  sel=null;render();
+}
+async function save(){
+  var p=activeProject();if(p)p.updatedAt=new Date().toISOString();
+  if(useIDB&&db){
+    try{for(var i=0;i<projects.length;i++)await idbPut('projects',projects[i]);await idbPut('meta',{key:'functions',value:funcs});await idbPut('meta',{key:'activeProjectId',value:activeId});return;}catch(e){useIDB=false;}
+  }
+  try{localStorage.setItem(KEY,JSON.stringify({projects:projects,funcs:funcs,activeId:activeId}));}catch(e){}
+}
+function saveNow(){save().then(function(){alert('已保存到本机浏览器');});}
+/* ---- render ---- */
+function render(){
+  var p=activeProject();if(!p)return;
+  var selEl=document.getElementById('projectSelect');
+  selEl.innerHTML=projects.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===p.id?' selected':'')+'>'+esc(x.name)+'（'+x.clips.length+' 条）</option>';}).join('');
+  var pl=document.getElementById('projectList');
+  pl.innerHTML=projects.map(function(x){return '<div class="proj'+(x.id===p.id?' sel':'')+'" onclick="switchProject(\''+esc(x.id)+'\')"><b>'+esc(x.name)+'</b><span class="note">'+x.clips.length+' 条</span></div>';}).join('');
+  var b=document.getElementById('board');b.innerHTML='';
+  p.clips.forEach(function(c,i){
+    var d=document.createElement('div');d.className='card'+(sel===c.id?' sel':'');d.style.background=c.color||'#fff';d.draggable=true;
+    d.ondragstart=function(e){e.dataTransfer.setData('text/plain',i);};
+    d.ondragover=function(e){e.preventDefault();};
+    d.ondrop=function(e){e.preventDefault();var from=+e.dataTransfer.getData('text/plain');var m=p.clips.splice(from,1)[0];p.clips.splice(i,0,m);save();render();};
+    d.onclick=function(){sel=c.id;render();};
+    d.innerHTML='<h3>'+esc(c.title)+'</h3><div class="meta">'+esc(c.who)+' · '+esc(c.time)+' · 约'+esc(c.dur)+'</div><div>'+esc(c.scene)+'</div>'+(c.line?'<div class="line">“'+esc(c.line)+'”</div>':'<div class="note">无台词</div>')+(c.mediaLink?'<div class="link">素材链接：<a href="'+esc(c.mediaLink)+'" target="_blank" rel="noopener" onclick="event.stopPropagation()">'+esc(c.mediaLink)+'</a></div>':'')+(c.custom&&c.custom.length?'<div class="custom">'+c.custom.map(function(x){return esc(x.k)+'：'+esc(x.v);}).join('；')+'</div>':'')+'<div class="actions"><button class="small" onclick="event.stopPropagation();moveClip('+i+',-1)">↑ 上移</button><button class="small" onclick="event.stopPropagation();moveClip('+i+',1)">↓ 下移</button><button class="small" onclick="event.stopPropagation();dupClip('+i+')">复制</button><button class="small" onclick="event.stopPropagation();delClip('+i+')">删除</button>'+funcs.map(function(f){return '<button class="small secondary" onclick="event.stopPropagation();runFn('+f.id+','+i+')">'+esc(f.name)+'</button>';}).join('')+'</div>';
+    b.appendChild(d);
+  });
+  renderEditor();renderFns();
+}
+function renderEditor(){
+  var el=document.getElementById('editor');var c=clips().find(function(x){return x.id===sel;});
+  if(!c){el.innerHTML='<p class="note">先点左边任意一张卡片。</p>';return;}
+  document.getElementById('cardColor').value=c.color||'#ffffff';
+  el.innerHTML=
+  '<label>标题</label><input value="'+esc(c.title)+'" onchange="editSel(\'title\',this.value)">'+
+  '<div class="row"><div><label>人物</label><select onchange="editSel(\'who\',this.value)"><option'+(c.who==='A'?' selected':'')+'>A</option><option'+(c.who==='B'?' selected':'')+'>B</option></select></div><div><label>时长</label><input value="'+esc(c.dur)+'" onchange="editSel(\'dur\',this.value)"></div></div>'+
+  '<label>时间</label><input value="'+esc(c.time)+'" onchange="editSel(\'time\',this.value)">'+
+  '<label>画面</label><textarea onchange="editSel(\'scene\',this.value)">'+esc(c.scene)+'</textarea>'+
+  '<label>台词（一字不差）</label><textarea onchange="editSel(\'line\',this.value)">'+esc(c.line)+'</textarea>'+
+  '<label>运镜</label><input value="'+esc(c.camera)+'" onchange="editSel(\'camera\',this.value)">'+
+  '<label>音效</label><input value="'+esc(c.sound)+'" onchange="editSel(\'sound\',this.value)">'+
+  '<label>素材链接（视频 / 参考图链接，只存链接，不上传文件）</label><input value="'+esc(c.mediaLink||'')+'" placeholder="粘贴云盘或对象存储链接" onchange="editSel(\'mediaLink\',this.value)">'+
+  '<p class="note">改完自动保存、卡片实时更新。自定义字段在下面加。</p>'+
+  (c.custom&&c.custom.length?c.custom.map(function(x,i){return '<div class="fn"><b>'+esc(x.k)+'：'+esc(x.v)+'</b><button class="small secondary" onclick="delCustom('+i+')">删</button></div>';}).join(''):'');
+}
+function editSel(k,v){var c=clips().find(function(x){return x.id===sel;});if(!c)return;c[k]=v;save();render();}
+function renderFns(){
+  var el=document.getElementById('fnList');
+  el.innerHTML=funcs.map(function(f){return '<div class="fn"><b>'+esc(f.name)+'</b><button class="small secondary" onclick="editFn('+f.id+')">改</button><button class="small secondary" onclick="delFn('+f.id+')">删</button></div>';}).join('')||'<p class="note">暂无功能，请在上面添加。</p>';
+}
+/* ---- projects ---- */
+function switchProject(id){if(!projects.find(function(p){return p.id===id;}))return;activeId=id;sel=null;save();render();}
+function createProject(){var name=prompt('新项目名字：','新项目');if(!name)return;var p={id:uid(),name:name.trim(),updatedAt:new Date().toISOString(),clips:[]};projects.push(p);activeId=p.id;sel=null;save();render();}
+function renameProject(){var p=activeProject();if(!p)return;var name=prompt('项目改名：',p.name);if(!name)return;p.name=name.trim();save();render();}
+function duplicateProject(){var p=activeProject();if(!p)return;var c=JSON.parse(JSON.stringify(p));c.id=uid();c.name=p.name+'（副本）';c.updatedAt=new Date().toISOString();c.clips.forEach(function(x){x.id=Date.now()+Math.floor(Math.random()*100000);});projects.push(c);activeId=c.id;sel=null;save();render();}
+async function deleteProject(){var p=activeProject();if(!p)return;if(projects.length<=1){alert('只剩一个项目，不能删除；可以先新建一个再删。');return;}if(!confirm('删除项目“'+p.name+'”？里面的卡片会一起删除，请先导出备份。'))return;var idx=projects.indexOf(p);projects.splice(idx,1);if(useIDB&&db){try{await idbDelete('projects',p.id);}catch(e){}}activeId=projects[0].id;sel=null;save();render();}
+/* ---- clips ---- */
+function addClip(){var p=activeProject();if(!p)return;var id=Date.now();p.clips.push({id:id,title:'新卡片',time:'',dur:'2.0秒',who:'A',scene:'',line:'',camera:'固定机位、近景',sound:'无',mediaLink:'',color:'#ffffff',custom:[]});sel=id;save();render();}
+function moveClip(i,d){var cs=clips();var j=i+d;if(j<0||j>=cs.length)return;var t=cs[i];cs[i]=cs[j];cs[j]=t;save();render();}
+function dupClip(i){var cs=clips();var c=JSON.parse(JSON.stringify(cs[i]));c.id=Date.now();c.title=c.title+'（副本）';cs.splice(i+1,0,c);save();render();}
+function delClip(i){if(!confirm('删除这张卡片？'))return;clips().splice(i,1);sel=null;save();render();}
+function addCustomField(){var c=clips().find(function(x){return x.id===sel;});if(!c){alert('先点一张卡片');return;}var k=document.getElementById('cfKey').value.trim(),v=document.getElementById('cfVal').value.trim();if(!k)return;c.custom=c.custom||[];c.custom.push({k:k,v:v});document.getElementById('cfKey').value='';document.getElementById('cfVal').value='';save();render();}
+function delCustom(i){var c=clips().find(function(x){return x.id===sel;});c.custom.splice(i,1);save();render();}
+function setColor(v){var c=clips().find(function(x){return x.id===sel;});if(!c)return;c.color=v;save();render();}
+/* ---- functions ---- */
+function addFunction(){var n=document.getElementById('fnName').value.trim(),t=document.getElementById('fnTpl').value.trim();if(!n||!t){alert('功能名和模板都要填');return;}funcs.push({id:Date.now(),name:n,tpl:t});document.getElementById('fnName').value='';document.getElementById('fnTpl').value='';save();render();}
+function editFn(id){var f=funcs.find(function(x){return x.id===id;});if(!f)return;var n=prompt('功能名：',f.name);if(n===null)return;var t=prompt('模板（可用 {scene} {line} {who} {dur} {camera} {sound} {time} {title}）：',f.tpl);if(t===null)return;if(n.trim())f.name=n.trim();if(t.trim())f.tpl=t.trim();save();render();}
+function delFn(id){if(!confirm('删除这个功能？'))return;funcs=funcs.filter(function(f){return f.id!==id;});save();render();}
+function applyTpl(tpl,c){return String(tpl).replaceAll('{scene}',c.scene||'').replaceAll('{line}',c.line||'').replaceAll('{who}',c.who||'').replaceAll('{dur}',c.dur||'').replaceAll('{camera}',c.camera||'').replaceAll('{sound}',c.sound||'').replaceAll('{time}',c.time||'').replaceAll('{title}',c.title||'');}
+function runFn(fid,i){var f=funcs.find(function(x){return x.id===fid;});if(!f)return;var out=applyTpl(f.tpl,clips()[i]);document.getElementById('out').textContent=out;copyText(out);}
+function copyAllConverted(){var f=funcs[0];if(!f){alert('先添加一个功能');return;}var out=clips().map(function(c,i){return '第'+(i+1)+'条\n'+applyTpl(f.tpl,c);}).join('\n\n---\n\n');document.getElementById('out').textContent=out;copyText(out);alert('已复制全部（按第一个功能模板转换）');}
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);return;}catch(e){}
+  try{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();return;}catch(e){}
+  var out=document.getElementById('out');if(out){var r=document.createRange();r.selectNodeContents(out);var s=window.getSelection();s.removeAllRanges();s.addRange(r);alert('已选中转换结果，请按 Ctrl/Cmd+C 复制');}
+}
+/* ---- export / import ---- */
+function download(name,text){var blob=new Blob([text],{type:'application/json'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},1000);}
+function exportCurrent(){var p=activeProject();if(!p)return;download('project-'+p.name+'.json',JSON.stringify({format:'video-canvas-project',version:1,exportedAt:new Date().toISOString(),project:p,functions:funcs},null,2));}
+function exportAll(){download('video-canvas-all-projects.json',JSON.stringify({format:'video-canvas-all',version:1,exportedAt:new Date().toISOString(),projects:projects,functions:funcs},null,2));}
+function normalizeClip(c,i){return {id:(c&&c.id)||Date.now()+i,title:(c&&c.title)||('卡片'+(i+1)),time:(c&&c.time)||'',dur:(c&&c.dur)||'',who:(c&&c.who)||'A',scene:(c&&c.scene)||'',line:(c&&c.line)||'',camera:(c&&c.camera)||'',sound:(c&&c.sound)||'',mediaLink:(c&&c.mediaLink)||'',color:(c&&c.color)||'#ffffff',custom:Array.isArray(c&&c.custom)?c.custom:[]};}
+function normalizeProject(p){var name=(p&&p.name)||'导入的项目';var cs=Array.isArray(p&&p.clips)?p.clips.map(normalizeClip):[];return {id:uid(),name:name,updatedAt:new Date().toISOString(),clips:cs};}
+function importJSON(e){
+  var f=e.target.files[0];if(!f)return;var r=new FileReader();
+  r.onload=function(){try{
+    var d=JSON.parse(r.result);
+    if(d&&d.format==='video-canvas-all'&&Array.isArray(d.projects)){
+      d.projects.forEach(function(p){var np=normalizeProject(p);projects.push(np);});
+      if(Array.isArray(d.functions)&&d.functions.length)funcs=d.functions;
+      activeId=projects[projects.length-1].id;
+    }else if(d&&d.project){
+      var np=normalizeProject(d.project);projects.push(np);activeId=np.id;
+      if(Array.isArray(d.functions)&&d.functions.length)funcs=d.functions;
+    }else if(d&&Array.isArray(d.clips)){
+      var np2=normalizeProject(d);projects.push(np2);activeId=np2.id;
+      if(Array.isArray(d.funcs))funcs=d.funcs;
+    }else if(Array.isArray(d)){
+      var np3={id:uid(),name:'导入的项目',updatedAt:new Date().toISOString(),clips:d.map(normalizeClip)};projects.push(np3);activeId=np3.id;
+    }else{alert('文件格式不对：请导入本工作台导出的 JSON');return;}
+    sel=null;save();render();alert('已导入');
+  }catch(err){alert('文件格式不对');}};
+  r.readAsText(f);e.target.value='';
+}
+async function resetDemo(){
+  if(!confirm('恢复面馆示例？会把当前项目替换成面馆示例，其他项目不受影响。'))return;
+  var p=activeProject();var demo=demoProject();
+  p.clips=demo.clips;p.name='面馆示例';sel=null;save();render();
+}
+function clearAll(){if(!confirm('清空当前项目的全部卡片？'))return;activeProject().clips=[];sel=null;save();render();}
+load();
+</script>
+</body>
+</html>
