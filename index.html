@@ -1,13 +1,61 @@
-<!doctype html>
-<html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>视频生成画布工作台</title>
-    <script type="module" crossorigin src="/video-canvas-workbench/assets/index-Cx89DEl2.js"></script>
-    <link rel="stylesheet" crossorigin href="/video-canvas-workbench/assets/index-B3BMDkjk.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
-</html>
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>画布 · 第1步</title>
+<style>*{box-sizing:border-box}body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;color:#e2e8f0;background:#050308;overflow:hidden}
+header{position:relative;z-index:3;height:52px;background:rgba(5,3,8,.72);backdrop-filter:blur(6px);border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;padding:0 16px;gap:12px}
+header h1{font-size:16px;margin:0;color:#fff;letter-spacing:2px}header h1 b{color:#facc15}
+header span{color:#94a3b8;font-size:12px;letter-spacing:1px}
+#stage{position:relative;height:420px;overflow:hidden}
+#particles{position:absolute;inset:0;width:100%;height:100%}
+#canvas{position:absolute;inset:0;z-index:2}
+.card{position:absolute;width:220px;background:rgba(10,8,20,.82);backdrop-filter:blur(4px);border:1px solid rgba(168,85,247,.45);border-radius:10px;padding:12px;cursor:grab;box-shadow:0 0 18px rgba(168,85,247,.25),0 8px 24px rgba(0,0,0,.6)}
+.card.sel{border-color:#facc15;box-shadow:0 0 22px rgba(250,204,21,.4)}
+.card h3{margin:0 0 6px;font-size:14px;color:#fff}.card h3 span{color:#facc15}.card p{margin:0;font-size:13px;color:#c4b5fd}
+.controls{position:absolute;left:12px;bottom:12px;display:flex;gap:6px;z-index:3}
+.controls button{border:1px solid rgba(255,255,255,.18);background:rgba(5,3,8,.7);color:#e2e8f0;border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer}
+#add{position:absolute;right:12px;bottom:12px;z-index:3;border:0;background:#facc15;color:#111;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer}
+.hint{position:relative;z-index:3;padding:10px 16px;font-size:13px;color:#94a3b8;background:#050308;border-top:1px solid rgba(255,255,255,.08)}</style></head>
+<body>
+<header><h1>视频生成画布 <b>// H3</b></h1><span>第1步：粒子画布 + 一张卡片 · 背景粒子跟随鼠标波动</span></header>
+<div id="stage">
+  <canvas id="particles"></canvas>
+  <div id="canvas">
+    <div class="card sel" id="card1" style="left:80px;top:60px"><h3><span>01</span> · 第1条</h3><p>拖我试试。滚轮缩放，鼠标划过背景，粒子会起波浪。</p></div>
+  </div>
+  <div class="controls"><button onclick="zoom(1.2)">放大 +</button><button onclick="zoom(0.8)">缩小 −</button><button onclick="zoom(1,true)">回到 100%</button></div>
+  <button id="add" onclick="addCard()">+ 加一张卡片</button>
+</div>
+<div class="hint">按你发的图改的：黑底 + 紫色 / 彩色碎片粒子，鼠标一划就起波浪。还是只有第1步，别的都没加。</div>
+<script>
+/* ---- 粒子背景：碎片随鼠标波动 ---- */
+var pc=document.getElementById('particles'),ctx=pc.getContext('2d'),W,H,pts=[],mouse={x:-9999,y:-9999};
+var COLORS=['#a855f7','#c084fc','#f0abfc','#22d3ee','#facc15','#ffffff','#818cf8'];
+function resize(){W=pc.width=pc.offsetWidth;H=pc.height=pc.offsetHeight;}
+window.addEventListener('resize',resize);resize();
+for(var i=0;i<160;i++){pts.push({x:Math.random()*2000,y:Math.random()*600,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.25,s:Math.random()*7+2,r:Math.random()*Math.PI,c:COLORS[i%COLORS.length],a:Math.random()*.7+.3});}
+document.getElementById('stage').addEventListener('mousemove',function(e){var r=pc.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;});
+document.getElementById('stage').addEventListener('mouseleave',function(){mouse.x=-9999;mouse.y=-9999;});
+function tick(){
+ctx.clearRect(0,0,W,H);
+for(var i=0;i<pts.length;i++){var p=pts[i];
+  var dx=p.x-mouse.x,dy=p.y-mouse.y,d=Math.sqrt(dx*dx+dy*dy);
+  if(d<140&&d>0){var f=(140-d)/140*2.2;p.x+=dx/d*f;p.y+=dy/d*f;}
+  p.x+=p.vx;p.y+=p.vy;p.r+=.01;
+  if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.r);ctx.globalAlpha=p.a;ctx.fillStyle=p.c;
+  ctx.beginPath();ctx.moveTo(0,-p.s);ctx.lineTo(p.s*.7,p.s*.6);ctx.lineTo(-p.s*.7,p.s*.6);ctx.closePath();ctx.fill();ctx.restore();
+}
+requestAnimationFrame(tick);
+}
+tick();
+/* ---- 卡片：拖动 / 缩放 / 加卡片 ---- */
+var scale=1,n=1,canvas=document.getElementById('canvas');
+canvas.addEventListener('wheel',function(e){e.preventDefault();zoom(e.deltaY<0?1.1:0.9);},{passive:false});
+function zoom(f,reset){scale=reset?1:scale*f;document.querySelectorAll('.card').forEach(function(c){c.style.transform='scale('+scale+')';c.style.transformOrigin='top left';});}
+function makeDrag(el){var sx,sy,ox,oy,drag=false;
+el.addEventListener('mousedown',function(e){drag=true;sx=e.clientX;sy=e.clientY;ox=el.offsetLeft;oy=el.offsetTop;document.querySelectorAll('.card').forEach(function(c){c.classList.remove('sel');});el.classList.add('sel');e.preventDefault();});
+document.addEventListener('mousemove',function(e){if(!drag)return;el.style.left=(ox+e.clientX-sx)+'px';el.style.top=(oy+e.clientY-sy)+'px';});
+document.addEventListener('mouseup',function(){drag=false;});}
+makeDrag(document.getElementById('card1'));
+function addCard(){n++;var d=document.createElement('div');d.className='card';d.style.left=(80+n*40)+'px';d.style.top=(60+n*40)+'px';d.innerHTML='<h3><span>0'+n+'</span> · 第'+n+'条</h3><p>新卡片，拖我试试。</p>';canvas.appendChild(d);makeDrag(d);}
+</script></body></html>
